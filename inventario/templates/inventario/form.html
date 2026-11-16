@@ -1,0 +1,346 @@
+{% extends 'inventario/base.html' %}
+
+{% block title %}{{ titulo }} — GameStock{% endblock %}
+{% block page_title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-12 {% if es_movimiento %}col-lg-8{% else %}col-lg-7{% endif %}">
+        
+        <!-- Tarjeta de Formulario Principal -->
+        <div class="steam-card">
+            <div class="steam-card-header">
+                <div>
+                    <h2 class="steam-card-title mb-1">
+                        {% if es_movimiento %}
+                        <i class="bi bi-arrow-left-right text-info"></i>
+                        {% elif juego %}
+                        <i class="bi bi-pencil-square text-info"></i>
+                        {% else %}
+                        <i class="bi bi-plus-circle-fill text-info"></i>
+                        {% endif %}
+                        <span>{{ titulo }}</span>
+                    </h2>
+                    <p class="text-muted small mb-0">{{ subtitulo|default:'Completa los campos para continuar.' }}</p>
+                </div>
+                <a href="{% if es_movimiento %}{% url 'historial' %}{% else %}{% url 'catalogo' %}{% endif %}" class="btn-steam btn-steam-secondary btn-steam-sm">
+                    <i class="bi bi-arrow-left"></i>
+                    <span>Volver</span>
+                </a>
+            </div>
+
+            <!-- Formulario con CSRF -->
+            <form method="post" id="gameStockForm" novalidate>
+                {% csrf_token %}
+
+                {% if form.non_field_errors %}
+                <div class="steam-alert steam-alert-danger mb-4">
+                    <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+                    <div>
+                        {% for error in form.non_field_errors %}
+                        <p class="mb-0">{{ error }}</p>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if es_movimiento %}
+                <!-- ================= VISTA DE COMPRA / VENTA ================= -->
+
+                <!-- Selector Visual de Tipo de Operación -->
+                <div class="mb-4">
+                    <label class="form-label-steam">Tipo de Operación</label>
+                    <div class="operation-toggle-group">
+                        <label class="op-toggle-option">
+                            <input type="radio" name="tipo" value="COMPRA" id="radioCompra" {% if form.tipo.value == 'COMPRA' or not form.tipo.value %}checked{% endif %}>
+                            <div class="op-toggle-card card-compra">
+                                <i class="bi bi-box-arrow-in-down op-icon text-info"></i>
+                                <div>
+                                    <div class="fw-bold text-white">COMPRA</div>
+                                    <small class="text-muted">Aumenta stock (proveedor)</small>
+                                </div>
+                            </div>
+                        </label>
+
+                        <label class="op-toggle-option">
+                            <input type="radio" name="tipo" value="VENTA" id="radioVenta" {% if form.tipo.value == 'VENTA' %}checked{% endif %}>
+                            <div class="op-toggle-card card-venta">
+                                <i class="bi bi-bag-check-fill op-icon text-success"></i>
+                                <div>
+                                    <div class="fw-bold text-white">VENTA</div>
+                                    <small class="text-muted">Descuenta stock (cliente)</small>
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                    {% if form.tipo.errors %}
+                    <div class="text-danger small mt-1">{{ form.tipo.errors.0 }}</div>
+                    {% endif %}
+                </div>
+
+                <!-- Selección de Videojuego -->
+                <div class="mb-4">
+                    <label for="{{ form.videojuego.id_for_label }}" class="form-label-steam">
+                        <i class="bi bi-controller me-1"></i> Videojuego
+                    </label>
+                    {{ form.videojuego }}
+                    <div class="d-flex justify-content-between align-items-center mt-2 px-1">
+                        <small class="text-muted">Selecciona el título a transaccionar.</small>
+                        <div id="stockBadgePreview" class="small fw-semibold text-info" style="display: none;">
+                            <i class="bi bi-boxes me-1"></i> Stock actual: <span id="currentStockSpan">0</span> unidades
+                        </div>
+                    </div>
+                    {% if form.videojuego.errors %}
+                    <div class="text-danger small mt-1">{{ form.videojuego.errors.0 }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="row g-3 mb-4">
+                    <!-- Cantidad -->
+                    <div class="col-12 col-md-6">
+                        <label for="{{ form.cantidad.id_for_label }}" class="form-label-steam">
+                            <i class="bi bi-123 me-1"></i> Cantidad de Unidades
+                        </label>
+                        {{ form.cantidad }}
+                        {% if form.cantidad.errors %}
+                        <div class="text-danger small mt-1">{{ form.cantidad.errors.0 }}</div>
+                        {% endif %}
+                        <div id="stockWarningAlert" class="text-danger small mt-1 fw-bold" style="display: none;">
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                            ¡Atención! La cantidad supera el stock disponible.
+                        </div>
+                    </div>
+
+                    <!-- Precio Unitario -->
+                    <div class="col-12 col-md-6">
+                        <label for="{{ form.precio_unitario.id_for_label }}" class="form-label-steam">
+                            <i class="bi bi-currency-dollar me-1"></i> Precio Unitario ($)
+                        </label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-dark border-secondary border-opacity-25 text-info">$</span>
+                            {{ form.precio_unitario }}
+                        </div>
+                        {% if form.precio_unitario.errors %}
+                        <div class="text-danger small mt-1">{{ form.precio_unitario.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Panel de Cálculo Dinámico en Tiempo Real -->
+                <div class="live-calc-box">
+                    <div class="live-calc-row">
+                        <span>Operación:</span>
+                        <span id="summaryOpType" class="badge-op-compra">Compra</span>
+                    </div>
+                    <div class="live-calc-row">
+                        <span>Precio Unitario:</span>
+                        <span id="summaryUnitPrice">$0</span>
+                    </div>
+                    <div class="live-calc-row">
+                        <span>Cantidad:</span>
+                        <span id="summaryQuantity">0 uds</span>
+                    </div>
+                    <div class="live-calc-total">
+                        <span>Total Transacción:</span>
+                        <span id="summaryTotal" class="text-info">$0</span>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-end gap-3 mt-4">
+                    <a href="{% url 'historial' %}" class="btn-steam btn-steam-secondary">Cancelar</a>
+                    <button type="submit" class="btn-steam btn-steam-primary" id="btnSubmitOperation">
+                        <i class="bi bi-check2-circle"></i>
+                        <span>Procesar y Actualizar Stock</span>
+                    </button>
+                </div>
+
+                {% else %}
+                <!-- ================= VISTA DE AGREGAR / EDITAR VIDEOJUEGO ================= -->
+
+                <!-- Título -->
+                <div class="mb-3">
+                    <label for="{{ form.titulo.id_for_label }}" class="form-label-steam">
+                        <i class="bi bi-tag-fill me-1"></i> Título del Videojuego
+                    </label>
+                    {{ form.titulo }}
+                    {% if form.titulo.errors %}
+                    <div class="text-danger small mt-1">{{ form.titulo.errors.0 }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <!-- Plataforma -->
+                    <div class="col-12 col-md-6">
+                        <label for="{{ form.plataforma.id_for_label }}" class="form-label-steam">
+                            <i class="bi bi-controller me-1"></i> Plataforma
+                        </label>
+                        {{ form.plataforma }}
+                        {% if form.plataforma.errors %}
+                        <div class="text-danger small mt-1">{{ form.plataforma.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Género -->
+                    <div class="col-12 col-md-6">
+                        <label for="{{ form.genero.id_for_label }}" class="form-label-steam">
+                            <i class="bi bi-bookmark-fill me-1"></i> Género
+                        </label>
+                        {{ form.genero }}
+                        {% if form.genero.errors %}
+                        <div class="text-danger small mt-1">{{ form.genero.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="row g-3 mb-3">
+                    <!-- Precio Compra -->
+                    <div class="col-12 col-md-6">
+                        <label for="{{ form.precio_compra.id_for_label }}" class="form-label-steam">
+                            <i class="bi bi-cart-dash-fill me-1"></i> Precio de Compra ($)
+                        </label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-dark border-secondary border-opacity-25 text-muted">$</span>
+                            {{ form.precio_compra }}
+                        </div>
+                        {% if form.precio_compra.errors %}
+                        <div class="text-danger small mt-1">{{ form.precio_compra.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Precio Venta -->
+                    <div class="col-12 col-md-6">
+                        <label for="{{ form.precio_venta.id_for_label }}" class="form-label-steam">
+                            <i class="bi bi-cart-plus-fill me-1"></i> Precio de Venta ($)
+                        </label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-dark border-secondary border-opacity-25 text-success">$</span>
+                            {{ form.precio_venta }}
+                        </div>
+                        {% if form.precio_venta.errors %}
+                        <div class="text-danger small mt-1">{{ form.precio_venta.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Stock Inicial / Disponible -->
+                <div class="mb-4">
+                    <label for="{{ form.stock.id_for_label }}" class="form-label-steam">
+                        <i class="bi bi-boxes me-1"></i> Stock Disponible (Unidades)
+                    </label>
+                    {{ form.stock }}
+                    <small class="text-muted d-block mt-1">Existencias físicas registradas en bodega.</small>
+                    {% if form.stock.errors %}
+                    <div class="text-danger small mt-1">{{ form.stock.errors.0 }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="d-flex justify-content-end gap-3 mt-4">
+                    <a href="{% url 'catalogo' %}" class="btn-steam btn-steam-secondary">Cancelar</a>
+                    <button type="submit" class="btn-steam btn-steam-primary">
+                        <i class="bi bi-save2-fill"></i>
+                        <span>Guardar Videojuego</span>
+                    </button>
+                </div>
+                {% endif %}
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+{% if es_movimiento %}
+<script>
+    // Lógica dinámica para la pantalla de compras y ventas
+    document.addEventListener('DOMContentLoaded', function() {
+        const juegosMeta = {{ juegos_meta_json|safe }};
+        const gameSelect = document.getElementById('id_videojuego');
+        const cantidadInput = document.getElementById('id_cantidad');
+        const precioInput = document.getElementById('id_precio_unitario');
+        const radioCompra = document.getElementById('radioCompra');
+        const radioVenta = document.getElementById('radioVenta');
+        
+        const stockBadge = document.getElementById('stockBadgePreview');
+        const currentStockSpan = document.getElementById('currentStockSpan');
+        const stockWarning = document.getElementById('stockWarningAlert');
+        
+        const summaryOp = document.getElementById('summaryOpType');
+        const summaryUnitPrice = document.getElementById('summaryUnitPrice');
+        const summaryQuantity = document.getElementById('summaryQuantity');
+        const summaryTotal = document.getElementById('summaryTotal');
+
+        function updateFormState() {
+            const isVenta = radioVenta && radioVenta.checked;
+            const selectedGameId = gameSelect ? gameSelect.value : '';
+            const gameData = juegosMeta[selectedGameId];
+
+            // 1. Actualizar Badge de Operación
+            if (summaryOp) {
+                if (isVenta) {
+                    summaryOp.className = 'badge-op-venta';
+                    summaryOp.innerHTML = '<i class="bi bi-bag-check-fill me-1"></i> Venta';
+                } else {
+                    summaryOp.className = 'badge-op-compra';
+                    summaryOp.innerHTML = '<i class="bi bi-box-arrow-in-down me-1"></i> Compra';
+                }
+            }
+
+            // 2. Mostrar stock actual del juego seleccionado
+            let currentStock = 0;
+            if (gameData) {
+                currentStock = gameData.stock;
+                if (stockBadge) {
+                    stockBadge.style.display = 'block';
+                    currentStockSpan.innerText = currentStock;
+                }
+                // Si el precio está vacío, sugerir el precio correspondiente
+                if (precioInput && (!precioInput.value || precioInput.value === '0' || precioInput.value === '0.00')) {
+                    precioInput.value = isVenta ? gameData.precio_venta : gameData.precio_compra;
+                }
+            } else if (stockBadge) {
+                stockBadge.style.display = 'none';
+            }
+
+            // 3. Validar advertencia de stock para venta
+            const qty = parseFloat(cantidadInput ? cantidadInput.value : 0) || 0;
+            if (isVenta && gameData && qty > currentStock) {
+                if (stockWarning) stockWarning.style.display = 'block';
+            } else {
+                if (stockWarning) stockWarning.style.display = 'none';
+            }
+
+            // 4. Calcular total en vivo
+            const price = parseFloat(precioInput ? precioInput.value : 0) || 0;
+            const total = qty * price;
+
+            if (summaryQuantity) summaryQuantity.innerText = qty + ' uds';
+            if (summaryUnitPrice) summaryUnitPrice.innerText = '$' + price.toLocaleString('es-CL', {minimumFractionDigits: 0, maximumFractionDigits: 2});
+            if (summaryTotal) {
+                summaryTotal.innerText = '$' + total.toLocaleString('es-CL', {minimumFractionDigits: 0, maximumFractionDigits: 2});
+                summaryTotal.className = isVenta ? 'text-success' : 'text-info';
+            }
+        }
+
+        // Listeners
+        if (radioCompra) radioCompra.addEventListener('change', updateFormState);
+        if (radioVenta) radioVenta.addEventListener('change', updateFormState);
+        if (gameSelect) {
+            gameSelect.addEventListener('change', function() {
+                // Al cambiar de juego, actualizar precio sugerido según compra o venta
+                const isVenta = radioVenta && radioVenta.checked;
+                const gameData = juegosMeta[gameSelect.value];
+                if (gameData && precioInput) {
+                    precioInput.value = isVenta ? gameData.precio_venta : gameData.precio_compra;
+                }
+                updateFormState();
+            });
+        }
+        if (cantidadInput) cantidadInput.addEventListener('input', updateFormState);
+        if (precioInput) precioInput.addEventListener('input', updateFormState);
+
+        // Disparo inicial
+        updateFormState();
+    });
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,351 @@
+{% extends 'inventario/base.html' %}
+
+{% block title %}Dashboard — GameStock{% endblock %}
+{% block page_title %}Dashboard de Control{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div>
+        <h2 class="h3 fw-bold text-white mb-1">Panel de Control & Estadísticas</h2>
+        <p class="text-muted mb-0">Bienvenido, <span class="text-info fw-semibold">{{ user.username }}</span>. Resumen en tiempo real del inventario y transacciones.</p>
+    </div>
+    <div class="d-flex gap-2">
+        {% if perms.inventario.add_videojuego %}
+        <a href="{% url 'crear' %}" class="btn-steam btn-steam-secondary">
+            <i class="bi bi-plus-lg"></i>
+            <span>Nuevo Juego</span>
+        </a>
+        {% endif %}
+        {% if perms.inventario.add_movimiento %}
+        <a href="{% url 'registrar' %}" class="btn-steam btn-steam-primary">
+            <i class="bi bi-cart-plus-fill"></i>
+            <span>Registrar Movimiento</span>
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Tarjetas de Estadísticas Principales -->
+<div class="row g-4 mb-4">
+    <!-- Card 1: Cantidad de Videojuegos -->
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="stat-card glow-cyan">
+            <div class="stat-content">
+                <div class="stat-label">Total Videojuegos</div>
+                <div class="stat-value">{{ productos }}</div>
+                <div class="stat-subtext"><i class="bi bi-check-circle-fill text-info me-1"></i> Títulos en catálogo</div>
+            </div>
+            <div class="stat-icon-wrapper">
+                <i class="bi bi-collection-play-fill"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 2: Stock Disponible -->
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="stat-card glow-purple">
+            <div class="stat-content">
+                <div class="stat-label">Stock Disponible</div>
+                <div class="stat-value">{{ unidades }}</div>
+                <div class="stat-subtext">
+                    {% if bajo_stock_count > 0 %}
+                    <span class="text-warning"><i class="bi bi-exclamation-triangle-fill me-1"></i>{{ bajo_stock_count }} por agotarse</span>
+                    {% else %}
+                    <span class="text-success"><i class="bi bi-box-seam me-1"></i>Inventario abastecido</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="stat-icon-wrapper">
+                <i class="bi bi-boxes"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 3: Ventas Registradas -->
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="stat-card glow-green">
+            <div class="stat-content">
+                <div class="stat-label">Ventas Registradas</div>
+                <div class="stat-value">${{ ventas|floatformat:0 }}</div>
+                <div class="stat-subtext"><i class="bi bi-graph-up-arrow text-success me-1"></i>{{ ventas_count }} ventas efectuadas</div>
+            </div>
+            <div class="stat-icon-wrapper">
+                <i class="bi bi-cash-stack"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- Card 4: Compras Registradas -->
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="stat-card glow-amber">
+            <div class="stat-content">
+                <div class="stat-label">Compras Realizadas</div>
+                <div class="stat-value">${{ compras|floatformat:0 }}</div>
+                <div class="stat-subtext"><i class="bi bi-cart-check-fill text-warning me-1"></i>{{ compras_count }} compras a proveedores</div>
+            </div>
+            <div class="stat-icon-wrapper">
+                <i class="bi bi-cart-fill"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Sección de Gráficos Interactivos (Chart.js) -->
+<div class="row g-4 mb-4">
+    <!-- Gráfico 1: Ventas vs Compras -->
+    <div class="col-12 col-lg-5">
+        <div class="steam-card h-100">
+            <div class="steam-card-header">
+                <h3 class="steam-card-title">
+                    <i class="bi bi-pie-chart-fill text-info"></i>
+                    <span>Balance Financiero</span>
+                </h3>
+                <span class="badge bg-dark border border-secondary border-opacity-25 text-muted px-2 py-1">Ventas / Compras</span>
+            </div>
+            <div class="d-flex flex-column align-items-center justify-content-center p-2" style="min-height: 260px;">
+                <div style="position: relative; width: 100%; max-width: 250px; height: 220px;">
+                    <canvas id="financialChart"></canvas>
+                </div>
+                <div class="d-flex justify-content-around w-100 mt-3 pt-3 border-top border-secondary border-opacity-10 text-center">
+                    <div>
+                        <div class="small text-muted">Total Ventas</div>
+                        <div class="fw-bold text-success">${{ ventas|floatformat:0 }}</div>
+                    </div>
+                    <div class="vr bg-secondary opacity-25"></div>
+                    <div>
+                        <div class="small text-muted">Total Compras</div>
+                        <div class="fw-bold text-info">${{ compras|floatformat:0 }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gráfico 2: Stock por Plataforma -->
+    <div class="col-12 col-lg-7">
+        <div class="steam-card h-100">
+            <div class="steam-card-header">
+                <h3 class="steam-card-title">
+                    <i class="bi bi-bar-chart-line-fill text-primary"></i>
+                    <span>Distribución de Stock por Plataforma</span>
+                </h3>
+                <span class="badge bg-dark border border-secondary border-opacity-25 text-info px-2 py-1">Unidades físicas</span>
+            </div>
+            <div class="p-2" style="min-height: 260px;">
+                <div style="position: relative; width: 100%; height: 250px;">
+                    <canvas id="platformStockChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tabla de Últimos Movimientos -->
+<div class="steam-card mb-4">
+    <div class="steam-card-header">
+        <h3 class="steam-card-title">
+            <i class="bi bi-clock-history text-info"></i>
+            <span>Últimos Movimientos Registrados</span>
+        </h3>
+        <a href="{% url 'historial' %}" class="btn-steam btn-steam-secondary btn-steam-sm">
+            <span>Ver historial completo</span>
+            <i class="bi bi-arrow-right"></i>
+        </a>
+    </div>
+
+    <div class="table-responsive">
+        <table class="steam-table">
+            <thead>
+                <tr>
+                    <th>Fecha y Hora</th>
+                    <th>Videojuego</th>
+                    <th>Operación</th>
+                    <th>Cantidad</th>
+                    <th>Precio Unitario</th>
+                    <th>Total</th>
+                    <th>Responsable</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for m in ultimos %}
+                <tr>
+                    <td>
+                        <span class="text-muted"><i class="bi bi-calendar3 me-1"></i>{{ m.fecha|date:'d/m/Y' }}</span>
+                        <span class="text-info small ms-1">{{ m.fecha|date:'H:i' }}</span>
+                    </td>
+                    <td>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge-plat {{ m.videojuego.platform_badge_class }}">
+                                <i class="bi {{ m.videojuego.platform_icon }}"></i>
+                                <span>{{ m.videojuego.get_plataforma_display }}</span>
+                            </span>
+                            <span class="fw-bold text-white">{{ m.videojuego.titulo }}</span>
+                        </div>
+                    </td>
+                    <td>
+                        {% if m.tipo == 'VENTA' %}
+                        <span class="badge-op-venta">
+                            <i class="bi bi-arrow-up-right-circle-fill"></i> Venta
+                        </span>
+                        {% else %}
+                        <span class="badge-op-compra">
+                            <i class="bi bi-arrow-down-left-circle-fill"></i> Compra
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="fw-bold">{{ m.cantidad }}</span>
+                        <span class="text-muted small">uds</span>
+                    </td>
+                    <td>${{ m.precio_unitario|floatformat:0 }}</td>
+                    <td>
+                        <span class="fw-bold {% if m.tipo == 'VENTA' %}text-success{% else %}text-info{% endif %}">
+                            ${{ m.total|floatformat:0 }}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge bg-dark border border-secondary border-opacity-25 text-light px-2 py-1">
+                            <i class="bi bi-person me-1"></i>{{ m.usuario.username }}
+                        </span>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="text-center py-5">
+                        <div class="py-4">
+                            <i class="bi bi-inbox fs-1 text-muted d-block mb-3"></i>
+                            <h5 class="text-white mb-2">No se registran movimientos aún</h5>
+                            <p class="text-muted small mb-3">Comienza registrando compras a proveedores o ventas a clientes.</p>
+                            {% if perms.inventario.add_movimiento %}
+                            <a href="{% url 'registrar' %}" class="btn-steam btn-steam-primary btn-steam-sm">
+                                <i class="bi bi-plus-lg"></i> Registrar primer movimiento
+                            </a>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Inicialización de Gráficos con Chart.js estilo Steam Gaming
+    document.addEventListener('DOMContentLoaded', function() {
+        const finLabels = {{ chart_fin_labels|safe }};
+        const finData = {{ chart_fin_data|safe }};
+        const platLabels = {{ chart_plat_labels|safe }};
+        const platData = {{ chart_plat_data|safe }};
+
+        // 1. Gráfico de Balance Financiero (Doughnut)
+        const finCtx = document.getElementById('financialChart');
+        if (finCtx) {
+            new Chart(finCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: finLabels,
+                    datasets: [{
+                        data: finData,
+                        backgroundColor: ['#00f5d4', '#00b4d8'],
+                        borderColor: '#151f32',
+                        borderWidth: 3,
+                        hoverOffset: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                color: '#c7d5e0',
+                                font: { size: 12, family: "'Segoe UI', sans-serif" },
+                                padding: 16
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: '#0a0e17',
+                            titleColor: '#fff',
+                            bodyColor: '#66c0f4',
+                            borderColor: 'rgba(102, 192, 244, 0.3)',
+                            borderWidth: 1,
+                            padding: 12,
+                            callbacks: {
+                                label: function(context) {
+                                    return ' ' + context.label + ': $' + context.raw.toLocaleString('es-CL');
+                                }
+                            }
+                        }
+                    },
+                    cutout: '72%'
+                }
+            });
+        }
+
+        // 2. Gráfico de Stock por Plataforma (Bar)
+        const platCtx = document.getElementById('platformStockChart');
+        if (platCtx) {
+            new Chart(platCtx, {
+                type: 'bar',
+                data: {
+                    labels: platLabels.length ? platLabels : ['Sin datos'],
+                    datasets: [{
+                        label: 'Unidades en Stock',
+                        data: platData.length ? platData : [0],
+                        backgroundColor: [
+                            'rgba(0, 210, 255, 0.75)',
+                            'rgba(96, 165, 250, 0.75)',
+                            'rgba(74, 222, 128, 0.75)',
+                            'rgba(248, 113, 113, 0.75)',
+                            'rgba(192, 132, 252, 0.75)',
+                            'rgba(255, 183, 3, 0.75)'
+                        ],
+                        borderColor: [
+                            '#00d2ff',
+                            '#60a5fa',
+                            '#4ade80',
+                            '#f87171',
+                            '#c084fc',
+                            '#ffb703'
+                        ],
+                        borderWidth: 1.5,
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: '#0a0e17',
+                            borderColor: 'rgba(102, 192, 244, 0.3)',
+                            borderWidth: 1,
+                            padding: 10
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: { color: '#8e9db3', font: { size: 12 } }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: { 
+                                color: '#8e9db3',
+                                precision: 0,
+                                font: { size: 12 }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    });
+</script>
+{% endblock %}
